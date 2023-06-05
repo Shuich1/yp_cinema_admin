@@ -27,10 +27,8 @@ services:
     depends_on:
       admin-postgres:
         condition: service_healthy
-    # expose:
-    #   - 8000
-    ports:
-      - "80:8000"
+    expose:
+      - 8000
     volumes:
       - ./admin/static:/opt/admin/static:rw
   
