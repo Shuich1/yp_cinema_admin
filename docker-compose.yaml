@@ -1,0 +1,72 @@
+version: '3.9'
+services:
+  admin-postgres:
+    image: postgres:13
+    env_file:
+      - .env
+    expose:
+      - 5432
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./db_init.sql:/docker-entrypoint-initdb.d/db_init.sql
+      - admin-db:/var/lib/postgresql/data
+  
+  admin-django:
+    build: ./admin
+    env_file:
+      - .env
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --silent ${ALLOWED_HOSTS}:${DJANGO_PORT} >/dev/null || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      admin-postgres:
+        condition: service_healthy
+    # expose:
+    #   - 8000
+    ports:
+      - "80:8000"
+    volumes:
+      - ./admin/static:/opt/admin/static:rw
+  
+  admin-sqlite-to-pg:
+    build: ./sqlite_to_postgres
+    depends_on:
+      admin-postgres:
+        condition: service_healthy
+      admin-django:
+        condition: service_healthy
+    volumes:
+      - ./.env:/opt/sqlite_to_postgres/.env:ro
+
+  admin-elastic:
+    image: elasticsearch:7.17.8
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms2048m -Xmx2048m
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --silent ${ES_URL}  >/dev/null || exit 1" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    expose:
+      - 9200
+
+  admin-pg-to-elastic:
+    build: ./postgres_to_es
+    env_file:
+      - .env
+    depends_on:
+      admin-postgres:
+        condition: service_healthy
+      admin-elastic:
+        condition: service_healthy
+
+volumes:
+  admin-db:
+  static:
